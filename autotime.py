@@ -1,66 +1,73 @@
-import requests
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Pause / resume daylight cycle otomatis
+• Ping jumlah pemain via mcstatus
+• Kirim perintah lewat API Pterodactyl
+"""
+
+import os
 import time
 import logging
-import os
+import requests
+from mcstatus import BedrockServer
 
-# Konfigurasi logging agar output muncul di Railway Console
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s")
+# ─── ENV (bisa diedit manual atau lewat Variables Railway) ────────────────────
+BEDROCK_HOST = os.getenv("BEDROCK_HOST", "shared14.kagestore.xyz")
+BEDROCK_PORT = int(os.getenv("BEDROCK_PORT", 19134))
 
-# Isi token API Pterodactyl milikmu di bawah ini
-API_KEY = os.getenv("PTERODACTYL_API_KEY", "PASTE_TOKEN_API_KAMU_DI_SINI")
+PANEL_API_URL = os.getenv("PTERODACTYL_API_URL", "https://dash.kagestore.com/api/client")
+SERVER_ID     = os.getenv("PTERODACTYL_SERVER_ID", "bdb20976")
+API_KEY       = os.getenv("PTERODACTYL_API_KEY", "ptlc_5Zan3yafaZN4HibIZ7hOVaTQ5g7txRB3yg7ocXdwopW")
 
-# Ubah ID server kamu di bawah ini (dari Pterodactyl panel)
-SERVER_ID = os.getenv("PTERODACTYL_SERVER_ID", "PASTE_ID_SERVER_KAMU_DI_SINI")
+CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 60))   # detik
+# ──────────────────────────────────────────────────────────────────────────────
 
-# URL endpoint API Pterodactyl
-API_URL = os.getenv("PTERODACTYL_API_URL", "https://panel.kagestore.com/api/client")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 HEADERS = {
     "Authorization": f"Bearer {API_KEY}",
-    "Accept": "Application/vnd.pterodactyl.v1+json",
+    "Accept": "Application/json",
     "Content-Type": "application/json"
 }
 
-def get_players():
-    """Ambil data pemain dari API Pterodactyl."""
+def get_online_players() -> int:
+    """Ping Bedrock server → kembalikan jumlah pemain online (atau -1 kalau gagal)."""
     try:
-        url = f"{API_URL}/servers/{SERVER_ID}/resources"
-        response = requests.get(url, headers=HEADERS)
-        if response.status_code == 200:
-            data = response.json()
-            return data["attributes"]["current_state"], data["attributes"]["players"]["count"]
-        else:
-            logging.error("Gagal mengambil data pemain. Status: %d", response.status_code)
-            return None, 0
+        status = BedrockServer.lookup(f"{BEDROCK_HOST}:{BEDROCK_PORT}").status()
+        return status.players.online
     except Exception as e:
-        logging.error("Terjadi kesalahan saat mengambil data pemain: %s", e)
-        return None, 0
+        logging.error("Gagal ping Bedrock: %s", e)
+        return -1
 
-def send_command(command):
-    """Kirim perintah ke server via API."""
+def send_command(cmd: str) -> None:
+    """Kirim perintah ke server via API Pterodactyl."""
+    url = f"{PANEL_API_URL}/servers/{SERVER_ID}/command"
     try:
-        url = f"{API_URL}/servers/{SERVER_ID}/command"
-        payload = { "command": command }
-        response = requests.post(url, json=payload, headers=HEADERS)
-        if response.status_code == 204:
-            logging.info("✔️  Berhasil menjalankan perintah: %s", command)
+        r = requests.post(url, headers=HEADERS, json={"command": cmd}, timeout=10)
+        if r.status_code == 204:
+            logging.info("✔️ Perintah terkirim: %s", cmd)
         else:
-            logging.error("❌  Gagal mengirim perintah. Status: %d", response.status_code)
-    except Exception as e:
-        logging.error("❌  Gagal mengirim perintah: %s", e)
+            logging.error("❌ Gagal kirim perintah (%s): %s", r.status_code, cmd)
+    except requests.RequestException as e:
+        logging.error("❌ Error koneksi API: %s", e)
 
 def main():
     while True:
-        state, player_count = get_players()
-        if state != "running":
-            logging.info("💤 Server tidak berjalan.")
-        elif player_count == 0:
-            logging.info("👤 Tidak ada pemain online → menghentikan waktu...")
+        online = get_online_players()
+        if online == -1:
+            logging.info("💤 Server tidak merespons; coba lagi %s detik…", CHECK_INTERVAL)
+        elif online == 0:
+            logging.info("👤 0 pemain online → hentikan waktu")
             send_command("gamerule doDaylightCycle false")
         else:
-            logging.info("🧍 Pemain terdeteksi → menyalakan waktu...")
+            logging.info("🎮 %s pemain online → nyalakan waktu", online)
             send_command("gamerule doDaylightCycle true")
-        time.sleep(30)
+        time.sleep(CHECK_INTERVAL)
 
 if __name__ == "__main__":
     main()

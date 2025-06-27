@@ -1,22 +1,66 @@
-import requests import time import logging
+import requests
+import time
+import logging
+import os
 
-Konfigurasi API Pterodactyl
+# Konfigurasi logging agar output muncul di Railway Console
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s")
 
-PANEL_URL = "https://dash.kagestore.com" SERVER_ID = "6dcd0d03"  # ID server kamu API_KEY = "q2Pyhlz0JbGEJcO2rLD7sZZrxL1v4AYEfs0pCCZ3"  # API key kamu
+# Isi token API Pterodactyl milikmu di bawah ini
+API_KEY = os.getenv("PTERODACTYL_API_KEY", "PASTE_TOKEN_API_KAMU_DI_SINI")
 
-Konfigurasi waktu jeda (dalam detik)
+# Ubah ID server kamu di bawah ini (dari Pterodactyl panel)
+SERVER_ID = os.getenv("PTERODACTYL_SERVER_ID", "PASTE_ID_SERVER_KAMU_DI_SINI")
 
-DELAY = 60
+# URL endpoint API Pterodactyl
+API_URL = os.getenv("PTERODACTYL_API_URL", "https://panel.kagestore.com/api/client")
 
-Setup logging
+HEADERS = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Accept": "Application/vnd.pterodactyl.v1+json",
+    "Content-Type": "application/json"
+}
 
-logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s: %(message)s")
+def get_players():
+    """Ambil data pemain dari API Pterodactyl."""
+    try:
+        url = f"{API_URL}/servers/{SERVER_ID}/resources"
+        response = requests.get(url, headers=HEADERS)
+        if response.status_code == 200:
+            data = response.json()
+            return data["attributes"]["current_state"], data["attributes"]["players"]["count"]
+        else:
+            logging.error("Gagal mengambil data pemain. Status: %d", response.status_code)
+            return None, 0
+    except Exception as e:
+        logging.error("Terjadi kesalahan saat mengambil data pemain: %s", e)
+        return None, 0
 
-def get_players(): url = f"{PANEL_URL}/api/client/servers/{SERVER_ID}/utilization" headers = { "Authorization": f"Bearer {API_KEY}", "Accept": "application/json", "Content-Type": "application/json" } try: response = requests.get(url, headers=headers) if response.status_code == 200: data = response.json() players = data.get("attributes", {}).get("resources", {}).get("players", 0) return players else: logging.error("Gagal mengambil data pemain. Status: %s", response.status_code) return 0 except Exception as e: logging.error("Terjadi kesalahan saat mengambil data pemain: %s", e) return 0
+def send_command(command):
+    """Kirim perintah ke server via API."""
+    try:
+        url = f"{API_URL}/servers/{SERVER_ID}/command"
+        payload = { "command": command }
+        response = requests.post(url, json=payload, headers=HEADERS)
+        if response.status_code == 204:
+            logging.info("✔️  Berhasil menjalankan perintah: %s", command)
+        else:
+            logging.error("❌  Gagal mengirim perintah. Status: %d", response.status_code)
+    except Exception as e:
+        logging.error("❌  Gagal mengirim perintah: %s", e)
 
-def send_command(command): url = f"{PANEL_URL}/api/client/servers/{SERVER_ID}/command" headers = { "Authorization": f"Bearer {API_KEY}", "Accept": "application/json", "Content-Type": "application/json" } try: response = requests.post(url, headers=headers, json={"command": command}) if response.status_code == 204: logging.info("\u2705  Berhasil menjalankan perintah: %s", command) else: logging.error("\u274C  Gagal menjalankan perintah: %s, Status: %s", command, response.status_code) except Exception as e: logging.error("Terjadi kesalahan saat mengirim perintah: %s", e)
+def main():
+    while True:
+        state, player_count = get_players()
+        if state != "running":
+            logging.info("💤 Server tidak berjalan.")
+        elif player_count == 0:
+            logging.info("👤 Tidak ada pemain online → menghentikan waktu...")
+            send_command("gamerule doDaylightCycle false")
+        else:
+            logging.info("🧍 Pemain terdeteksi → menyalakan waktu...")
+            send_command("gamerule doDaylightCycle true")
+        time.sleep(30)
 
-def main(): while True: players = get_players() if players == 0: logging.info("\U0001F464 Tidak ada pemain online → menghentikan waktu...") send_command("gamerule doDaylightCycle false") else: logging.info("\U0001F3AE %s pemain online → menyalakan waktu...", players) send_command("gamerule doDaylightCycle true") time.sleep(DELAY)
-
-if name == "main": main()
-
+if __name__ == "__main__":
+    main()

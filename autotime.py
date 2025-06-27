@@ -1,73 +1,52 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Pause / resume daylight cycle otomatis
-• Ping jumlah pemain via mcstatus
-• Kirim perintah lewat API Pterodactyl
-"""
-
 import os
-import time
-import logging
 import requests
-from mcstatus import BedrockServer
+import logging
 
-# ─── ENV (bisa diedit manual atau lewat Variables Railway) ────────────────────
-BEDROCK_HOST = os.getenv("BEDROCK_HOST", "shared14.kagestore.xyz")
-BEDROCK_PORT = int(os.getenv("BEDROCK_PORT", 19134))
-
-PANEL_API_URL = os.getenv("PTERODACTYL_API_URL", "https://dash.kagestore.com/api/client")
-SERVER_ID     = os.getenv("PTERODACTYL_SERVER_ID", "bdb20976")
-API_KEY       = os.getenv("PTERODACTYL_API_KEY", "ptlc_5Zan3yafaZN4HibIZ7hOVaTQ5g7txRB3yg7ocXdwopW")
-
-CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 60))   # detik
-# ──────────────────────────────────────────────────────────────────────────────
-
+# Konfigurasi logging
 logging.basicConfig(
+    format='[%(asctime)s] %(levelname)s: %(message)s',
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+# Konfigurasi server kamu
+PTERO_API_KEY = "ptlc_5Zan3yafaZN4HibIZ7hOVaTQ5g7txRB3yg7ocXdwopW"
+PTERO_PANEL_URL = "https://dash.kagestore.com"
+SERVER_ID = "bdb20976"
+
 HEADERS = {
-    "Authorization": f"Bearer {API_KEY}",
-    "Accept": "Application/json",
-    "Content-Type": "application/json"
+    "Authorization": f"Bearer {PTERO_API_KEY}",
+    "Accept": "Application/vnd.pterodactyl.v1+json",
+    "Content-Type": "application/json",
 }
 
-def get_online_players() -> int:
-    """Ping Bedrock server → kembalikan jumlah pemain online (atau -1 kalau gagal)."""
-    try:
-        status = BedrockServer.lookup(f"{BEDROCK_HOST}:{BEDROCK_PORT}").status()
-        return status.players.online
-    except Exception as e:
-        logging.error("Gagal ping Bedrock: %s", e)
-        return -1
+def get_players():
+    url = f"{PTERO_PANEL_URL}/api/client/servers/{SERVER_ID}/utilization"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code == 200:
+        data = response.json()
+        return data.get("attributes", {}).get("resources", {}).get("players", 0)
+    else:
+        logging.error("Gagal mengambil data pemain. Status:", response.status_code)
+        return 0
 
-def send_command(cmd: str) -> None:
-    """Kirim perintah ke server via API Pterodactyl."""
-    url = f"{PANEL_API_URL}/servers/{SERVER_ID}/command"
-    try:
-        r = requests.post(url, headers=HEADERS, json={"command": cmd}, timeout=10)
-        if r.status_code == 204:
-            logging.info("✔️ Perintah terkirim: %s", cmd)
-        else:
-            logging.error("❌ Gagal kirim perintah (%s): %s", r.status_code, cmd)
-    except requests.RequestException as e:
-        logging.error("❌ Error koneksi API: %s", e)
+def send_command(command):
+    url = f"{PTERO_PANEL_URL}/api/client/servers/{SERVER_ID}/command"
+    data = {"command": command}
+    response = requests.post(url, headers=HEADERS, json=data)
+    if response.status_code == 204:
+        logging.info(f"✔️  Berhasil menjalankan perintah: {command}")
+    else:
+        logging.error(f"❌  Gagal menjalankan perintah: {command}. Status: {response.status_code}")
 
 def main():
-    while True:
-        online = get_online_players()
-        if online == -1:
-            logging.info("💤 Server tidak merespons; coba lagi %s detik…", CHECK_INTERVAL)
-        elif online == 0:
-            logging.info("👤 0 pemain online → hentikan waktu")
-            send_command("gamerule doDaylightCycle false")
-        else:
-            logging.info("🎮 %s pemain online → nyalakan waktu", online)
-            send_command("gamerule doDaylightCycle true")
-        time.sleep(CHECK_INTERVAL)
+    players = get_players()
+    if players == 0:
+        logging.info("👤 Tidak ada pemain online → menghentikan waktu...")
+        send_command("gamerule doDaylightCycle false")
+    else:
+        logging.info(f"👥 {players} pemain online → menyalakan waktu...")
+        send_command("gamerule doDaylightCycle true")
 
 if __name__ == "__main__":
     main()

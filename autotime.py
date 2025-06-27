@@ -1,16 +1,17 @@
-import time
-import datetime
-start_time = time.time()
-print("⏳ Mulai:", datetime.datetime.now().isoformat())
+#!/usr/bin/env python3
+# autotime.py  –  versi dengan pengukur durasi
+
 import requests
 import time
 import logging
+import datetime
 
-# === KONFIGURASI PTERODACTYL ===
-PANEL_URL = "https://dash.kagestore.com"          # domain panel
-SERVER_ID = "bdb20976"                            # ID server
-API_KEY   = "ptlc_5Zan3yafaZN4HibIZ7hOVaTQ5g7txRB3yg7ocXdwopW"  # API token
-DELAY = 60  # detik (interval cek)
+# ──────────────── Konfigurasi ────────────────
+PANEL_URL = "https://dash.kagestore.com"
+SERVER_ID = "bdb20976"
+API_KEY   = "ptlc_5Zan3yafaZN4HibIZ7hOVaTQ5g7txRB3yg7ocXdwopW"
+DELAY     = 60                    # detik
+# ─────────────────────────────────────────────
 
 HEADERS = {
     "Authorization": f"Bearer {API_KEY}",
@@ -20,23 +21,22 @@ HEADERS = {
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s]: %(message)s",
+    format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
 def get_players():
     url = f"{PANEL_URL}/api/client/servers/{SERVER_ID}/resources"
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            # Ini kadang menyebabkan KeyError – biarkan apa adanya
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
             return data["attributes"]["players"]
         else:
-            logging.error("Gagal mengambil data pemain. Status:", resp.status_code)
+            logging.error("Gagal ambil data pemain. Status: %s", r.status_code)
             return 0
     except Exception as e:
-        logging.error("Terjadi kesalahan saat mengambil data pemain:", e)
+        logging.error("Kesalahan ambil pemain: %s", e)
         return 0
 
 def send_command(cmd: str):
@@ -46,25 +46,27 @@ def send_command(cmd: str):
         if r.status_code == 204:
             logging.info("✔️  Perintah terkirim: %s", cmd)
         else:
-            logging.error("❌  Gagal kirim perintah. Status:", r.status_code)
+            logging.error("❌  Gagal kirim perintah. Status: %s", r.status_code)
     except Exception as e:
-        logging.error("❌  Gagal kirim perintah:", e)
+        logging.error("❌  Error kirim perintah: %s", e)
 
 def main():
-    while True:
-        players = get_players()
-        if players == 0:
-            logging.info("👤 0 pemain online → waktu dihentikan")
-            send_command("gamerule doDaylightCycle false")
-        else:
-            logging.info("🎮 %s pemain online → waktu berjalan", players)
-            send_command("gamerule doDaylightCycle true")
-        time.sleep(DELAY)
+    players = get_players()
+    if players == 0:
+        logging.info("👤 0 pemain online → waktu dihentikan")
+        send_command("gamerule doDaylightCycle false")
+    else:
+        logging.info("🎮 %s pemain online → waktu berjalan", players)
+        send_command("gamerule doDaylightCycle true")
 
+# ───────  jalankan & ukur durasinya  ────────
 if __name__ == "__main__":
-    main()
+    start = time.time()
+    print("⏳ Mulai:", datetime.datetime.now().isoformat())
 
-end_time = time.time()
-duration = end_time - start_time
-print("✅ Selesai:", datetime.datetime.now().isoformat())
-print(f"⏱️ Durasi eksekusi: {duration:.2f} detik")
+    main()                     # menjalankan logika utama
+
+    akhir = time.time()
+    durasi = akhir - start
+    print("✅ Selesai:", datetime.datetime.now().isoformat())
+    print(f"⏱️ Durasi eksekusi: {durasi:.2f} detik")

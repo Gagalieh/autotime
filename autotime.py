@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-# autotime.py  –  versi dengan pengukur durasi
+import requests, time, logging, datetime
+from mcstatus import BedrockServer
 
-import requests
-import time
-import logging
-import datetime
+# ── CONFIG ─────────────────────────────────────────
+BEDROCK_HOST  = "shared14.kagestore.xyz"
+BEDROCK_PORT  = 19134
 
-# ──────────────── Konfigurasi ────────────────
-PANEL_URL = "https://dash.kagestore.com"
-SERVER_ID = "bdb20976"
-API_KEY   = "ptlc_5Zan3yafaZN4HibIZ7hOVaTQ5g7txRB3yg7ocXdwopW"
-DELAY     = 60                    # detik
-# ─────────────────────────────────────────────
+PANEL_URL     = "https://dash.kagestore.com"
+SERVER_ID     = "bdb20976"
+API_KEY       = "ptlc_5Zan3yafaZN4HibIZ7hOVaTQ5g7txRB3yg7ocXdwopW"
+
+CHECK_INTERVAL = 60           # detik (loop setiap 60 s)
+# ──────────────────────────────────────────────────
 
 HEADERS = {
     "Authorization": f"Bearer {API_KEY}",
@@ -25,18 +25,12 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
-def get_players():
-    url = f"{PANEL_URL}/api/client/servers/{SERVER_ID}/resources"
+def get_online_players() -> int:
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            return data["attributes"]["players"]
-        else:
-            logging.error("Gagal ambil data pemain. Status: %s", r.status_code)
-            return 0
+        status = BedrockServer.lookup(f"{BEDROCK_HOST}:{BEDROCK_PORT}").status()
+        return status.players.online
     except Exception as e:
-        logging.error("Kesalahan ambil pemain: %s", e)
+        logging.error("Ping Bedrock gagal: %s", e)
         return 0
 
 def send_command(cmd: str):
@@ -46,27 +40,24 @@ def send_command(cmd: str):
         if r.status_code == 204:
             logging.info("✔️  Perintah terkirim: %s", cmd)
         else:
-            logging.error("❌  Gagal kirim perintah. Status: %s", r.status_code)
+            logging.error("❌  Kirim perintah gagal. Status: %s", r.status_code)
     except Exception as e:
-        logging.error("❌  Error kirim perintah: %s", e)
+        logging.error("❌  Error koneksi API: %s", e)
 
 def main():
-    players = get_players()
-    if players == 0:
-        logging.info("👤 0 pemain online → waktu dihentikan")
-        send_command("gamerule doDaylightCycle false")
-    else:
-        logging.info("🎮 %s pemain online → waktu berjalan", players)
-        send_command("gamerule doDaylightCycle true")
+    while True:
+        players = get_online_players()
+        if players == 0:
+            logging.info("👤 0 pemain online → stop waktu")
+            send_command("gamerule doDaylightCycle false")
+        else:
+            logging.info("🎮 %s pemain online → start waktu", players)
+            send_command("gamerule doDaylightCycle true")
+        time.sleep(CHECK_INTERVAL)
 
-# ───────  jalankan & ukur durasinya  ────────
 if __name__ == "__main__":
     start = time.time()
     print("⏳ Mulai:", datetime.datetime.now().isoformat())
-
-    main()                     # menjalankan logika utama
-
-    akhir = time.time()
-    durasi = akhir - start
+    main()
     print("✅ Selesai:", datetime.datetime.now().isoformat())
-    print(f"⏱️ Durasi eksekusi: {durasi:.2f} detik")
+    print(f"⏱️ Durasi: {time.time() - start:.2f} detik")

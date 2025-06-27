@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import requests, time, logging, datetime
+import requests, logging, datetime, time
 from mcstatus import BedrockServer
 
 # ── CONFIG ─────────────────────────────────────────
@@ -9,8 +9,6 @@ BEDROCK_PORT  = 19134
 PANEL_URL     = "https://dash.kagestore.com"
 SERVER_ID     = "bdb20976"
 API_KEY       = "ptlc_5Zan3yafaZN4HibIZ7hOVaTQ5g7txRB3yg7ocXdwopW"
-
-CHECK_INTERVAL = 60           # detik (loop setiap 60 s)
 # ──────────────────────────────────────────────────
 
 HEADERS = {
@@ -30,7 +28,7 @@ def get_online_players() -> int:
         status = BedrockServer.lookup(f"{BEDROCK_HOST}:{BEDROCK_PORT}").status()
         return status.players.online
     except Exception as e:
-        logging.error("Ping Bedrock gagal: %s", e)
+        logging.error("❌ Ping Bedrock gagal: %s", e)
         return 0
 
 def send_command(cmd: str):
@@ -40,24 +38,21 @@ def send_command(cmd: str):
         if r.status_code == 204:
             logging.info("✔️  Perintah terkirim: %s", cmd)
         else:
-            logging.error("❌  Kirim perintah gagal. Status: %s", r.status_code)
+            logging.error("❌ Gagal kirim perintah. Status: %s", r.status_code)
     except Exception as e:
-        logging.error("❌  Error koneksi API: %s", e)
+        logging.error("❌ Koneksi API gagal: %s", e)
 
 def main():
-    while True:
-        players = get_online_players()
-        if players == 0:
-            logging.info("👤 0 pemain online → stop waktu")
-            send_command("gamerule doDaylightCycle false")
-        else:
-            logging.info("🎮 %s pemain online → start waktu", players)
-            send_command("gamerule doDaylightCycle true")
-        time.sleep(CHECK_INTERVAL)
+    start = time.time()
+    logging.info("⏳ Eksekusi dimulai...")
+    players = get_online_players()
+    if players == 0:
+        logging.info("👤 0 pemain online → waktu dihentikan")
+        send_command("gamerule doDaylightCycle false")
+    else:
+        logging.info("🎮 %s pemain online → waktu dinyalakan", players)
+        send_command("gamerule doDaylightCycle true")
+    logging.info("✅ Eksekusi selesai dalam %.2f detik", time.time() - start)
 
 if __name__ == "__main__":
-    start = time.time()
-    print("⏳ Mulai:", datetime.datetime.now().isoformat())
     main()
-    print("✅ Selesai:", datetime.datetime.now().isoformat())
-    print(f"⏱️ Durasi: {time.time() - start:.2f} detik")

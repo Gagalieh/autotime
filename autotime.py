@@ -1,52 +1,61 @@
-import os
 import requests
+import time
 import logging
 
-# Konfigurasi logging
-logging.basicConfig(
-    format='[%(asctime)s] %(levelname)s: %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-# Konfigurasi server kamu
-PTERO_API_KEY = "ptlc_5Zan3yafaZN4HibIZ7hOVaTQ5g7txRB3yg7ocXdwopW"
-PTERO_PANEL_URL = "https://dash.kagestore.com"
-SERVER_ID = "bdb20976"
+# === KONFIGURASI PTERODACTYL ===
+PANEL_URL = "https://dash.kagestore.com"          # domain panel
+SERVER_ID = "bdb20976"                            # ID server
+API_KEY   = "ptlc_5Zan3yafaZN4HibIZ7hOVaTQ5g7txRB3yg7ocXdwopW"  # API token
+DELAY = 60  # detik (interval cek)
 
 HEADERS = {
-    "Authorization": f"Bearer {PTERO_API_KEY}",
-    "Accept": "Application/vnd.pterodactyl.v1+json",
-    "Content-Type": "application/json",
+    "Authorization": f"Bearer {API_KEY}",
+    "Accept": "application/json",
+    "Content-Type": "application/json"
 }
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s]: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
 def get_players():
-    url = f"{PTERO_PANEL_URL}/api/client/servers/{SERVER_ID}/utilization"
-    response = requests.get(url, headers=HEADERS)
-    if response.status_code == 200:
-        data = response.json()
-        return data.get("attributes", {}).get("resources", {}).get("players", 0)
-    else:
-        logging.error("Gagal mengambil data pemain. Status:", response.status_code)
+    url = f"{PANEL_URL}/api/client/servers/{SERVER_ID}/resources"
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            # Ini kadang menyebabkan KeyError – biarkan apa adanya
+            return data["attributes"]["players"]
+        else:
+            logging.error("Gagal mengambil data pemain. Status:", resp.status_code)
+            return 0
+    except Exception as e:
+        logging.error("Terjadi kesalahan saat mengambil data pemain:", e)
         return 0
 
-def send_command(command):
-    url = f"{PTERO_PANEL_URL}/api/client/servers/{SERVER_ID}/command"
-    data = {"command": command}
-    response = requests.post(url, headers=HEADERS, json=data)
-    if response.status_code == 204:
-        logging.info(f"✔️  Berhasil menjalankan perintah: {command}")
-    else:
-        logging.error(f"❌  Gagal menjalankan perintah: {command}. Status: {response.status_code}")
+def send_command(cmd: str):
+    url = f"{PANEL_URL}/api/client/servers/{SERVER_ID}/command"
+    try:
+        r = requests.post(url, headers=HEADERS, json={"command": cmd}, timeout=10)
+        if r.status_code == 204:
+            logging.info("✔️  Perintah terkirim: %s", cmd)
+        else:
+            logging.error("❌  Gagal kirim perintah. Status:", r.status_code)
+    except Exception as e:
+        logging.error("❌  Gagal kirim perintah:", e)
 
 def main():
-    players = get_players()
-    if players == 0:
-        logging.info("👤 Tidak ada pemain online → menghentikan waktu...")
-        send_command("gamerule doDaylightCycle false")
-    else:
-        logging.info(f"👥 {players} pemain online → menyalakan waktu...")
-        send_command("gamerule doDaylightCycle true")
+    while True:
+        players = get_players()
+        if players == 0:
+            logging.info("👤 0 pemain online → waktu dihentikan")
+            send_command("gamerule doDaylightCycle false")
+        else:
+            logging.info("🎮 %s pemain online → waktu berjalan", players)
+            send_command("gamerule doDaylightCycle true")
+        time.sleep(DELAY)
 
 if __name__ == "__main__":
     main()

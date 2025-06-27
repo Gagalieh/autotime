@@ -1,3 +1,7 @@
+import time
+import datetime
+start_time = time.time()
+print("⏳ Mulai:", datetime.datetime.now().isoformat())
 import requests
 import time
 import logging
@@ -59,3 +63,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+end_time = time.time()
+duration = end_time - start_time
+print("✅ Selesai:", datetime.datetime.now().isoformat())
+print(f"⏱️ Durasi eksekusi: {duration:.2f} detik")
